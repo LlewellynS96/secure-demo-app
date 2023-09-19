@@ -342,7 +342,7 @@ spec:
     istio: gateway
   servers:
   - port:
-      number: 8080
+      number: 80
       name: http
       protocol: HTTP
     hosts:
