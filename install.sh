@@ -6,8 +6,10 @@ UNINSTALL=false
 EXTERNAL_LB=false
 ISTIO=false
 DISABLE_LB=""
+INSTALL_MONITORING=false
+INSTALL_BOOKINFO=false
 
-while getopts ":nc:uli" option; do
+while getopts ":nc:ulimb" option; do
    case $option in
       n) NEW_CLUSTER=true
          ;;
@@ -18,6 +20,10 @@ while getopts ":nc:uli" option; do
       l) EXTERNAL_LB=true
          ;;
       i) ISTIO=true
+         ;;
+      m) INSTALL_MONITORING=true
+         ;;
+      b) INSTALL_BOOKINFO=true
          ;;
      \?) # Invalid option
          echo "Error: Invalid option"
@@ -39,13 +45,23 @@ fi
 
 if $EXTERNAL_LB ; then
   helm upgrade --install -n metallb-system --create-namespace metallb ./metallb -f ./metallb/values.yaml --wait
-  IP_ADDRESS=docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' k3d-$(CLUSTER_NAME)-server-0 | cut -d "." -f1-3
-  sed -e 's|0.0.0.0\/0|${IP_ADDRESS}.253\/32|g' manifests/metallb.yaml | kubectl apply -f -
+  IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' k3d-$CLUSTER_NAME-server-0 | cut -d "." -f1-3)
+  sed -e 's|0.0.0.0\/0|'"$IP_ADDRESS"'.253\/32|g' manifests/metallb.yaml | kubectl apply -f -
 fi
 
 if $ISTIO ; then
   helm upgrade --install -n istio-system --create-namespace istio-base ./istio/base -f ./istio/base/values.yaml --wait
   helm upgrade --install -n istio-system istiod ./istio/istiod -f ./istio/istiod/values.yaml --wait
   helm upgrade --install gateway -n istio-ingress ./istio/gateway --create-namespace -f ./istio/gateway/values.yaml --wait
+  kubectl apply -f ./manifests/istio-gateway.yaml
+fi
+
+if $INSTALL_MONITORING ; then
+  kubectl apply -f ./manifests/prometheus.yaml
+  kubectl apply -f ./manifests/kiali.yaml
+fi
+
+if $INSTALL_BOOKINFO ; then
+  kubectl apply -f ./manifests/bookinfo.yaml
 fi
 

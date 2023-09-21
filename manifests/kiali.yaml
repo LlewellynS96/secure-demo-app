@@ -92,8 +92,22 @@ data:
     external_services:
       custom_dashboards:
         enabled: true
+      tracing:
+        enabled: false
+      grafana:
+        enabled: false
       istio:
         root_namespace: istio-system
+        component_status:
+          enabled: true
+          components:
+          - app_label: "istiod"
+            is_core: true
+            is_proxy: false
+          - app_label: "gateway"
+            is_core: true
+            is_proxy: true
+            namespace: istio-ingress
     identity:
       cert_file: ""
       private_key_file: ""
@@ -548,4 +562,37 @@ spec:
         configMap:
           name: kiali-cabundle
           optional: true
+...
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: kiali
+  namespace: istio-system
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - istio-system/istio-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /kiali
+    route:
+    - destination:
+        host: kiali
+        port:
+          number: 20001
+...
+---
+apiVersion: 'networking.istio.io/v1alpha3'
+kind: DestinationRule
+metadata:
+  name: kiali
+  namespace: istio-system
+spec:
+  host: kiali.istio-system.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
 ...
