@@ -13,7 +13,6 @@ istio:
 	helm upgrade --install gateway -n istio-ingress ./istio/gateway --create-namespace -f ./istio/gateway/values.yaml --wait
 
 bookinfo:
-	kubectl label namespace default istio-injection=enabled --overwrite
 	kubectl apply -f ./manifests/bookinfo.yaml
 
 kiali:
