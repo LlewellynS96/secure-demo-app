@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+option go_package = "./;pb";
+
+message Request{}
+
+message Reply {
+  string data = 1;
+}
+
+service RemoteProcedureCall {
+  rpc Bidirectional(stream Request) returns (stream Reply) {}
+}
