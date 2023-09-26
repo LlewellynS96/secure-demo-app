@@ -1,6 +1,6 @@
-#!/bin/bash
-
 CLUSTER_NAME=secure-demo-app
+NETWORK_NAME=$CLUSTER_NAME-network
+LOCAL_REGISTRY_PORT=12345
 NEW_CLUSTER=false
 UNINSTALL=false
 CREATE_REGISTRY=false
@@ -9,8 +9,9 @@ ISTIO=false
 DISABLE_LB=""
 INSTALL_MONITORING=false
 INSTALL_BOOKINFO=false
+BUILD_GRPC=false
 
-while getopts ":nc:urlimb" option; do
+while getopts ":nc:urlimbg" option; do
    case $option in
       n) NEW_CLUSTER=true
          ;;
@@ -28,6 +29,8 @@ while getopts ":nc:urlimb" option; do
          ;;
       b) INSTALL_BOOKINFO=true
          ;;
+      g) BUILD_GRPC=true
+         ;;
      \?) # Invalid option
          echo "Error: Invalid option"
          exit;;
@@ -35,9 +38,16 @@ while getopts ":nc:urlimb" option; do
 done
 
 if $UNINSTALL ; then
-  k3d registry delete $CLUSTER_NAME-registry
+  docker stop "local-registry"
+  docker rm "local-registry"
   k3d cluster delete $CLUSTER_NAME
+  docker network rm $NETWORK_NAME
 fi
+
+if [ -z "$(docker network ls | grep $NETWORK_NAME)" ]; then
+  docker network create $NETWORK_NAME
+fi
+
 
 if $EXTERNAL_LB ; then
   DISABLE_LB='--k3s-arg --disable=servicelb@server:*'
@@ -46,17 +56,13 @@ fi
 USE_REGISTRY=""
 
 if $CREATE_REGISTRY ; then
-  if [ ! -z "$(docker network ls | grep k3d-$CLUSTER_NAME)" ]; then
-    docker network create k3d-$CLUSTER_NAME
-  else
-  echo 5
-  fi
-  k3d registry create $CLUSTER_NAME-registry --default-network k3d-$CLUSTER_NAME --port 12345
-  USE_REGISTRY="--registry-use k3d-$CLUSTER_NAME-registry"
+  docker run -d -p 0.0.0.0:12345:5000 --name "local-registry" registry:2
+  docker network connect "$NETWORK_NAME" "local-registry"
+  USE_REGISTRY="--registry-config registries.yaml"
 fi
 
 if $NEW_CLUSTER ; then
-  k3d cluster create $CLUSTER_NAME --k3s-arg "--disable=traefik@server:*" $DISABLE_LB $USE_REGISTRY --no-lb -p "30000-30099:30000-30099@server:0:direct"
+  k3d cluster create $CLUSTER_NAME --network $NETWORK_NAME --k3s-arg "--disable=traefik@server:*" $DISABLE_LB $USE_REGISTRY --no-lb -p "30000-30099:30000-30099@server:0:direct"
 fi
 
 if $EXTERNAL_LB ; then
@@ -75,6 +81,18 @@ fi
 if $INSTALL_MONITORING ; then
   kubectl apply -f ./manifests/prometheus.yaml
   kubectl apply -f ./manifests/kiali.yaml
+fi
+
+if $BUILD_GRPC ; then
+  docker build -t cache apps/protobuf
+  CLIENT_IMAGE_TAG=$(awk -F'"' '/appVersion/{print $2}' apps/client/helm/Chart.yaml)
+  docker build -t localhost:$LOCAL_REGISTRY_PORT/client:$CLIENT_IMAGE_TAG apps/client
+  docker push localhost:$LOCAL_REGISTRY_PORT/client:$CLIENT_IMAGE_TAG
+  SERVER_IMAGE_TAG=$(awk -F'"' '/appVersion/{print $2}' apps/server/helm/Chart.yaml)
+  docker build -t localhost:$LOCAL_REGISTRY_PORT/server:$SERVER_IMAGE_TAG apps/server
+  docker push localhost:$LOCAL_REGISTRY_PORT/server:$SERVER_IMAGE_TAG
+  helm upgrade --install client apps/client/helm
+  helm upgrade --install server apps/server/helm
 fi
 
 if $INSTALL_BOOKINFO ; then

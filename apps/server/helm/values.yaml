@@ -1,13 +1,12 @@
-# Default values for client.
+# Default values for server.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
 replicaCount: 1
 
 image:
-  repository: local-registry:5000/client
-  # repository: local-registry:5000/client
-  pullPolicy: Always
+  repository: local-registry:5000/server
+  pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
@@ -26,6 +25,9 @@ serviceAccount:
 
 podAnnotations: {}
 
+podLabels:
+  sidecar.istio.io/inject: "true"
+
 podSecurityContext: {}
   # fsGroup: 2000
 
@@ -36,6 +38,26 @@ securityContext: {}
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
   # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 4000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -61,3 +83,6 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+istio:
+  enabled: true
